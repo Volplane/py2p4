@@ -1,4 +1,4 @@
-################################################################################
+#st###############################################################################
 # The Pyretic Project                                                          #
 # frenetic-lang.org/pyretic                                                    #
 # author: Joshua Reich (jreich@cs.princeton.edu)                               #
@@ -37,10 +37,15 @@ from pyretic.core.classifier import get_rule_exact_match
 from pyretic.core.classifier import get_rule_derivation_tree
 from pyretic.core.classifier import get_rule_derivation_leaves
 
+from pyretic.modules.pipeGen import *
+from pyretic.modules.p4_gen import *
+from pyretic.modules.p4ct import *
+
 from multiprocessing import Process, Manager, RLock, Lock, Value, Queue, Condition
 import logging, sys, time
 from datetime import datetime
 import copy
+import time
 
 TABLE_MISS_PRIORITY = 0
 TABLE_START_PRIORITY = 60000
@@ -55,7 +60,7 @@ class Runtime(object):
     """
     The Runtime system.  Includes packet handling, compilation to OF switches,
     topology maintenance, dynamic update of policies, querying support, etc.
-    
+
     :param backend: handles the connection to switches
     :type backend: Backend
     :param main: the program to run
@@ -71,8 +76,8 @@ class Runtime(object):
     :param pipeline: for multi-stage switches, a pipeline configuration
     :type pipeline: pipeline_config
     """
-    
-    
+
+
     def __init__(self, backend, main, path_main, kwargs, mode='interpreted',
                  verbosity='normal',use_nx=False, pipeline="default_pipeline",
                  opt_flags=None, use_pyretic=False, use_fdd=False, offline=False,
@@ -159,7 +164,7 @@ class Runtime(object):
         self.write_log.addHandler(fh)
 
 ######################
-# Stat Methods 
+# Stat Methods
 ######################
 
 
@@ -184,7 +189,7 @@ class Runtime(object):
              self.ragel_enabled, self.partition_enabled,
              self.partition_cnt, self.cache_enabled,
              self.edge_contraction_enabled, self.preddecomp_enabled) = opt_flags
-             
+
             self.partition_enabled &= not self.partition_cnt is None
         ''' Set multitable_enabled to True if other run-time options indicate
         that we are using multi-stage tables with separate forwarding and
@@ -210,7 +215,7 @@ class Runtime(object):
         """ Switch count for netkat compilation """
         return (self.partition_cnt if self.partition_cnt
                 else len(self.network.topology.nodes()))
-        
+
     def get_subpolicy_compile_stats(self, path_main, restart_frenetic=False):
         """ TODO(ngsrinivas): the stuff stored in the in_table_list;
         out_table_list, etc. has changed. May need to update this function to
@@ -231,7 +236,7 @@ class Runtime(object):
                     self.get_subpolicy_compile_stats_per_stage(
                         in_table, out_table, in_tag, in_cap, out_tag, out_cap,
                         restart_frenetic=restart_frenetic)
-    
+
     def get_subpolicy_compile_stats_per_stage(self, in_table, out_table,
                                               in_tag = None, in_cap = None,
                                               out_tag = None,
@@ -253,17 +258,17 @@ class Runtime(object):
         self.write_log.info("compiling new stage.")
 
         if self.multitable_enabled:
-            
+
 
             if self.integrate_enabled:
                 in_table = LeafSketch('in_table', in_table)
                 out_table = LeafSketch('out_table', out_table)
-                
-                sketch = [(in_table, False), (out_table, True)] 
+
+                sketch = [(in_table, False), (out_table, True)]
                             #(vf_tag, False), (vf_untag, True)]
-                
+
             else:
-                
+
                 in_tag = LeafSketch('in_tag', in_tag)
                 out_tag = LeafSketch('out_tag', out_tag)
                 in_capture = LeafSketch('in_capture', in_cap)
@@ -272,16 +277,16 @@ class Runtime(object):
                 in_table.name = 'in_table'
                 out_table = out_tag // out_capture
                 out_table.name = 'out_table'
-                sketch = [(in_table, False), 
-                            (out_table, True),] 
+                sketch = [(in_table, False),
+                            (out_table, True),]
                             #(vf_tag, False), (vf_untag, True)]
-                
+
         else:
             in_tag = LeafSketch('in_tag', in_tag)
             out_tag = LeafSketch('out_tag', out_tag)
             in_capture = LeafSketch('in_capture', in_cap)
             out_capture = LeafSketch('out_capture', out_cap)
-            
+
             in_tag_policy = in_tag * forwarding
             in_fwd_out = (in_tag_policy * out_tag)
             full_out_cap = (in_tag_policy * out_capture)
@@ -294,7 +299,7 @@ class Runtime(object):
             final_pol.name = 'final_pol'
             #TODO: This is currently not what happens
             #      in actual compilation with netkat
-            sketch = [(final_pol, False)] 
+            sketch = [(final_pol, False)]
 
         if sketch:
             for s in sketch:
@@ -326,13 +331,13 @@ class Runtime(object):
 
 
 ######################
-# PACKET INTERPRETER 
+# PACKET INTERPRETER
 ######################
 
     def handle_packet_in(self, concrete_pkt, cookie):
         """
         The packet interpreter.
-        
+
         :param concrete_packet: the packet to be interpreted.
         :type limit: payload of an OpenFlow packet_in message.
         """
@@ -364,13 +369,13 @@ class Runtime(object):
                 else:
                     q.apply()
             self.in_bucket_apply = False
-            
+
             # if the query changed the policy, update the controller and switch state
             if self.bucket_triggered_policy_update:
                 self.update_dynamic_sub_pols()
                 self.update_switch_classifiers()
                 self.bucket_triggered_policy_update = False
-                    
+
         # send output of evaluation into the network
         concrete_output = map(self.pyretic2concrete,output)
         self.log.debug("Corresponding packetouts: %d" %
@@ -388,7 +393,7 @@ class Runtime(object):
 
 
 #############
-# DYNAMICS  
+# DYNAMICS
 #############
 
     def handle_policy_change(self,sub_pol):
@@ -467,7 +472,7 @@ class Runtime(object):
 
             self.in_network_update = False
 
-    
+
     def netkat_classifier_compile(self, pol):
         # Force recompilation overriding cached policies, if the network has
         # changed. This is to ensure that a local classifier is regenerated for
@@ -544,7 +549,7 @@ class Runtime(object):
         Updates switch classifiers
         """
         classifier = None
-        
+
         if self.mode == 'reactive0':
             self.clear_all()
 
@@ -605,10 +610,57 @@ class Runtime(object):
             return list_diff_by_f(new, old, id)
 
         import copy
+
+        mt_node = mt_Generator(self.policy)
+        mt_printer(mt_node)
+        domino_list = [1,0,0,[],[]]
+        domino_list = domino_trans(mt_node, domino_list)
+        dynamic_handler(domino_list)
+
+        mt_node = mt_Generator(self.policy)
+        mt_printer(mt_node)
+        domino_list = [1,0,0,[],[]]
+        domino_list = domino_trans(mt_node, domino_list)
+        print('domino_nodes_printer')
+        #for tmps in domino_list[3]:
+        #    print tmps
+        #packetfields = FwdBucket_packetfield_handler(domino_list)
+        #for pfs in packetfields:
+        #    print pfs
+        #    for pf in pfs:
+        #        print pf
+        #tmp_pkt = Packet()
+        #tmp_pkt.modifymany({'ethtype':'2048','protocol':'6'})
+        domino_list = domino_graph_gen(domino_list)
+        domino_printer(domino_list)
+        domino_list = domino_stage_gen_v2(domino_list)
+        print('domino_stage_printer')
+        domino_printer(domino_list)
+        p4_file_gen(domino_list)
+        p4s_connection_flag = true
+        while(p4s_connection_flag):
+            try:
+                build_connection_to_switch(domino_list)
+            except:
+                print("Connection failed, try make the autogen p4 switch first")
+                time.sleep(10)
+            else:
+                print("Connection Succeed!")
+                p4s_connection_flag = false
+
+
         old_dynamic_sub_pols = copy.copy(self.dynamic_sub_pols)
         self.dynamic_sub_pols = ast_fold(add_dynamic_sub_pols, list(), self.policy)
         old = old_dynamic_sub_pols
         new = self.dynamic_sub_pols
+
+        print("new:")
+        print(new)
+
+        for p in new:
+            print('sub:')
+            print(p)
+
         for p in old_but_not_new(old, new):
             p.detach()
         for p in new_but_not_old(old, new):
@@ -650,6 +702,10 @@ class Runtime(object):
         ast_fold = path_policy_utils.path_policy_ast_fold
         add_pols = path_policy_utils.add_dynamic_path_pols
         self.dynamic_sub_path_pols = ast_fold(path_pol, add_pols, set())
+
+        print("dynamic_sub_path_pols:")
+        print(self.dynamic_sub_path_pols)
+
         for pp in (old_dynamic_sub_path_pols - self.dynamic_sub_path_pols):
             pp.path_detach()
         for pp in (self.dynamic_sub_path_pols - old_dynamic_sub_path_pols):
@@ -753,9 +809,9 @@ class Runtime(object):
 
         :param pkt: the packet to match
         :type pkt: Packet
-        :returns: an exact-match predicate 
+        :returns: an exact-match predicate
         :rtype: dict of strings to values
-        """        
+        """
         pred = pkt.copy()
         del pred['header_len']
         del pred['payload_len']
@@ -764,21 +820,21 @@ class Runtime(object):
 
     def match_on_all_fields_rule_tuple(self, pkt_in, pkts_out):
         """
-        Produces a rule tuple exactly matching a given packet 
+        Produces a rule tuple exactly matching a given packet
         and outputing a given set of packets..
 
         :param pkt_in: the input packet
         :type pkt_in: Packet
         :param pkts_out: the output packets
         :type pkts_out: set Packet
-        :returns: an exact-match (microflow) rule 
+        :returns: an exact-match (microflow) rule
         :rtype: (dict of strings to values, int, list int)
-        """        
+        """
         concrete_pkt_in = self.pyretic2concrete(pkt_in)
         concrete_pred = self.match_on_all_fields(concrete_pkt_in)
         action_list = []
         default_table = 0
-        
+
         ### IF NO PKTS OUT THEN INSTALL DROP (EMPTY ACTION LIST)
         if len(pkts_out) == 0:
             return (concrete_pred,0,action_list,self.default_cookie,False,default_table)
@@ -798,12 +854,12 @@ class Runtime(object):
                     out_val = concrete_pkt_out[field]
                 except:
                     out_val = None
-                if not out_val == in_val: 
+                if not out_val == in_val:
                     actions[field] = out_val
             action_list.append(actions)
 
         # DEAL W/ BUG IN OVS ACCEPTING ARP RULES THAT AREN'T ACTUALLY EXECUTED
-        if pkt_in['ethtype'] == ARP_TYPE: 
+        if pkt_in['ethtype'] == ARP_TYPE:
             for action_set in action_list:
                 if len(action_set) > 1:
                     return None
@@ -811,7 +867,7 @@ class Runtime(object):
         return (concrete_pred,0,action_list,self.default_cookie,False,default_table)
 
 #########################
-# PROACTIVE COMPILATION 
+# PROACTIVE COMPILATION
 #########################
 
     def get_cookie(self, version, table_id):
@@ -898,7 +954,7 @@ class Runtime(object):
                 out += '  actions: %s\n' % str(self.actions)
                 return out
 
-        ### CLASSIFIER TRANSFORMS 
+        ### CLASSIFIER TRANSFORMS
 
         # TODO (josh) logic for detecting action sets that can't be compiled
         # e.g., {modify(dstip='10.0.0.1',outport=1),modify(srcip='10.0.0.2',outport=2)]
@@ -906,7 +962,7 @@ class Runtime(object):
         def remove_identity(classifier):
             """
             Removes identity policies from the action list.
-            
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :returns: the output classifier
@@ -955,10 +1011,10 @@ class Runtime(object):
             """
             Replaces each rule whose actions includes a send to controller action
             with one whose sole action sends packets to the controller. (Thereby
-            avoiding the tricky situation of needing to determine whether a given 
-            packet reached the controller b/c that packet is being forwarded to a 
+            avoiding the tricky situation of needing to determine whether a given
+            packet reached the controller b/c that packet is being forwarded to a
             query bucket or b/c corresponding rules haven't yet been installed.
-                        
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :returns: the output classifier
@@ -974,7 +1030,7 @@ class Runtime(object):
                                 op=rule.op)
                 else:
                     return rule
-            return Classifier(controllerify_rule(rule) 
+            return Classifier(controllerify_rule(rule)
                               for rule in classifier.rules)
 
         def vlan_specialize(classifier):
@@ -1004,9 +1060,9 @@ class Runtime(object):
         def layer_3_specialize(classifier):
             """
             Specialize a layer-3 rule to several rules that match on layer-2 fields.
-            OpenFlow requires a layer-3 match to match on layer-2 ethtype.  Also, 
+            OpenFlow requires a layer-3 match to match on layer-2 ethtype.  Also,
             make sure that LLDP packets are reserved for use by the runtime.
-            
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :returns: the output classifier
@@ -1015,8 +1071,8 @@ class Runtime(object):
             specialized_rules = []
             for rule in classifier.rules:
                 if ( isinstance(rule.match, match) and
-                     ( 'srcip' in rule.match.map or 
-                       'dstip' in rule.match.map ) and 
+                     ( 'srcip' in rule.match.map or
+                       'dstip' in rule.match.map ) and
                      not 'ethtype' in rule.match.map ):
                     specialized_rules.append(Rule(rule.match &
                                                   match(ethtype=IP_TYPE),
@@ -1207,7 +1263,7 @@ class Runtime(object):
         def remove_matching_aggregate_buckets(diff_lists):
             """
             Remove CountBucket policies from classifier rule actions.
-            
+
             :param diff_lists: difference lists between new and old classifier
             :type diff_lists: 4 tuple of rule lists.
             :returns: new difference lists with bucket actions removed
@@ -1239,10 +1295,10 @@ class Runtime(object):
 
         def switchify(classifier,switches):
             """
-            Specialize a classifer to a set of switches.  Any rule that doesn't 
+            Specialize a classifer to a set of switches.  Any rule that doesn't
             specify a match on switch is turned into a set of rules matching on
             each switch respectively.
-            
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :param switches: the network switches
@@ -1268,7 +1324,7 @@ class Runtime(object):
         def concretize(classifier, table_id):
             """
             Convert policies into dictionaries.
-            
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :returns: the output classifier
@@ -1329,7 +1385,7 @@ class Runtime(object):
             def check_OF_rule_has_outport(acts):
                 for a in acts:
                     if not 'port' in a:
-                        raise TypeError('Invalid rule: concrete actions must have an outport',str(r))  
+                        raise TypeError('Invalid rule: concrete actions must have an outport',str(r))
             def check_OF_rule_has_compilable_action_list(acts):
                 if len(acts)<2:
                     pass
@@ -1338,7 +1394,7 @@ class Runtime(object):
                     for a in acts:
                         curr_moded_fields = set(a.keys())
                         if prev_moded_fields - curr_moded_fields:
-                            raise TypeError('Non-compilable rule',str(r))  
+                            raise TypeError('Non-compilable rule',str(r))
                         prev_moded_fields = curr_moded_fields
             new_rules = list()
             for r in classifier.rules:
@@ -1357,7 +1413,7 @@ class Runtime(object):
 
         def OF_inportize(classifier):
             """
-            Specialize classifier to ensure that packets to be forwarded 
+            Specialize classifier to ensure that packets to be forwarded
             out the inport on which they arrived are handled correctly.
 
             :param classifier: the input classifer
@@ -1424,7 +1480,7 @@ class Runtime(object):
         def prioritize(classifier):
             """
             Add priorities to classifier rules based on their ordering.
-            
+
             :param classifier: the input classifer
             :type classifier: Classifier
             :returns: the output classifier
@@ -1474,7 +1530,7 @@ class Runtime(object):
 
             for rule in new_rules:
                 self.install_rule(rule)
-                
+
             for s in switches:
                 self.send_barrier(s)
                 if self.verbosity >= self.verbosity_numeric('please-make-it-stop'):
@@ -1633,7 +1689,7 @@ class Runtime(object):
             current switch tables. The function takes the set of rules (added,
             deleted, modified, untouched), and does necessary flow
             installs/deletes/modifies.
-            
+
             :param diff_lists: list of rules to add, delete, modify, stay.
             :type diff_lists: 4 tuple of rule lists
             :param classifier_version_no: version of the classifier after
@@ -1842,7 +1898,7 @@ class Runtime(object):
             self.last_queried_time[s] = time.time()
 
 ####################################
-# PACKET MARSHALLING/UNMARSHALLING 
+# PACKET MARSHALLING/UNMARSHALLING
 ####################################
 
     def concrete2pyretic(self,raw_pkt):
@@ -1892,7 +1948,7 @@ class Runtime(object):
         return concrete_packet
 
 #######################
-# TO OPENFLOW         
+# TO OPENFLOW
 #######################
 
     def send_reset_install_time(self):
@@ -1941,7 +1997,7 @@ class Runtime(object):
 
 
 #######################
-# FROM OPENFLOW       
+# FROM OPENFLOW
 #######################
 
     def handle_switch_join(self,switch_id):
@@ -1998,7 +2054,7 @@ class Runtime(object):
         flow_stats = sorted(flow_stats, key=lambda d: -d['priority'])
         self.log.debug(
             '|%s|\n\t%s\n' % (str(datetime.now()),
-                '\n'.join(['flow table for switch='+repr(switch)] + 
+                '\n'.join(['flow table for switch='+repr(switch)] +
                     [self.flow_stat_str(f) for f in flow_stats])))
         # Debug prints whenever some flow has non-zero counters
         for f in flow_stats:
@@ -2258,7 +2314,7 @@ class Runtime(object):
                  self.virtual_untag))
 
 ##########################
-# VIRTUAL HEADER SUPPORT 
+# VIRTUAL HEADER SUPPORT
 ##########################
 
     def encode_extended_values(self, extended_values):
@@ -2272,7 +2328,7 @@ class Runtime(object):
             self.extended_values_to_vlan_db[extended_values] = (vid, pcp)
             self.vlan_to_extended_values_db[(vid, pcp)] = extended_values
             return (vid, pcp)
-        
+
     def decode_extended_values(self, vid, pcp):
         with self.extended_values_lock:
             extended_values = self.vlan_to_extended_values_db.get((vid, pcp))
@@ -2293,7 +2349,7 @@ def extended_values_from(packet):
 # Concrete Network
 ################################################################################
 
-import threading 
+import threading
 
 class ConcreteNetwork(Network):
     def __init__(self,runtime=None):
@@ -2332,33 +2388,33 @@ class ConcreteNetwork(Network):
         with self.update_no_lock:
             self.update_no += 1
             return self.update_no
-           
+
     def inject_discovery_packet(self, dpid, port_no):
         self.runtime.inject_discovery_packet(dpid, port_no)
-        
+
     def handle_switch_join(self, switch):
         self.debug_log.debug("handle_switch_joins")
         ## PROBABLY SHOULD CHECK TO SEE IF SWITCH ALREADY IN NEXT_TOPO
         self.next_topo.add_switch(switch)
         self.log.info("OpenFlow switch %s connected" % switch)
         self.debug_log.debug(str(self.next_topo))
-        
+
     def remove_associated_link(self,location):
         port = self.next_topo.node[location.switch]["ports"][location.port_no]
         if not port.linked_to is None:
             # REMOVE CORRESPONDING EDGE
-            try:      
+            try:
                 self.next_topo.remove_edge(location.switch, port.linked_to.switch)
             except:
                 pass  # ALREADY REMOVED
             # UNLINK LINKED_TO PORT
-            try:      
+            try:
                 self.next_topo.node[port.linked_to.switch]["ports"][port.linked_to.port_no].linked_to = None
             except KeyError:
                 pass  # LINKED TO PORT ALREADY DELETED
             # UNLINK SELF
             self.next_topo.node[location.switch]["ports"][location.port_no].linked_to = None
-        
+
     def handle_switch_part(self, switch):
         self.log.info("OpenFlow switch %s disconnected" % switch)
         self.debug_log.debug("handle_switch_parts")
@@ -2368,7 +2424,7 @@ class ConcreteNetwork(Network):
         self.next_topo.remove_node(switch)
         self.debug_log.debug(str(self.next_topo))
         self.queue_update(self.get_update_no())
-        
+
     def handle_port_join(self, switch, port_no, config, status, port_type):
         self.debug_log.debug("handle_port_joins %s:%s:%s:%s" % (switch, port_no, config, status))
         this_update_no = self.get_update_no()
@@ -2381,7 +2437,7 @@ class ConcreteNetwork(Network):
             self.inject_discovery_packet(switch,port_no)
             self.debug_log.debug(str(self.next_topo))
             self.queue_update(this_update_no)
-            
+
     def handle_port_part(self, switch, port_no):
         self.debug_log.debug("handle_port_parts")
         try:
@@ -2391,7 +2447,7 @@ class ConcreteNetwork(Network):
             self.queue_update(self.get_update_no())
         except KeyError:
             pass  # THE SWITCH HAS ALREADY BEEN REMOVED BY handle_switch_parts
-        
+
     def handle_port_mod(self, switch, port_no, config, status, port_type):
         self.debug_log.debug("handle_port_mods %s:%s:%s:%s" % (switch, port_no, config, status))
         # GET PREV VALUES
@@ -2408,7 +2464,7 @@ class ConcreteNetwork(Network):
         self.next_topo.node[switch]["ports"][port_no].config = config
         self.next_topo.node[switch]["ports"][port_no].status = status
         self.next_topo.node[switch]["ports"][port_no].port_type = port_type
-        
+
 
         # DETERMINE IF/WHAT CHANGED
         if (prev_config and not config):
@@ -2433,7 +2489,7 @@ class ConcreteNetwork(Network):
             self.debug_log.debug(str(self.next_topo))
             self.queue_update(self.get_update_no())
             if double_check: self.inject_discovery_packet(switch,port_no)
-        except KeyError:  
+        except KeyError:
             pass  # THE SWITCH HAS ALREADY BEEN REMOVED BY handle_switch_parts
 
     def handle_link_update(self, s1, p_no1, s2, p_no2):
@@ -2450,14 +2506,14 @@ class ConcreteNetwork(Network):
             link = self.next_topo[s1][s2]
 
             # LINK ON SAME PORT PAIR
-            if link[s1] == p_no1 and link[s2] == p_no2:         
-                if p1.possibly_up() and p2.possibly_up():   
+            if link[s1] == p_no1 and link[s2] == p_no2:
+                if p1.possibly_up() and p2.possibly_up():
                     self.debug_log.debug("nothing to do")
                     return                                      #   NOTHING TO DO
                 else:                                           # ELSE RAISE AN ERROR - SOMETHING WEIRD IS HAPPENING
                     raise RuntimeError('Link update w/ bad port status %s,%s' % (p1,p2))
             # LINK PORTS CHANGED
-            else:                                               
+            else:
                 # REMOVE OLD LINKS
                 if link[s1] != p_no1:
                     self.remove_associated_link(Location(s1,link[s1]))
@@ -2465,21 +2521,21 @@ class ConcreteNetwork(Network):
                     self.remove_associated_link(Location(s2,link[s2]))
 
         # COMPLETELY NEW LINK
-        except KeyError:     
+        except KeyError:
             pass
-        
+
         # ADD LINK IF PORTS ARE UP
         if p1.possibly_up() and p2.possibly_up():
             self.next_topo.node[s1]["ports"][p_no1].linked_to = Location(s2,p_no2)
-            self.next_topo.node[s2]["ports"][p_no2].linked_to = Location(s1,p_no1)   
-            pt1 = self.next_topo.node[s1]["ports"][p_no1].port_type 
-            pt2 = self.next_topo.node[s2]["ports"][p_no2].port_type 
+            self.next_topo.node[s2]["ports"][p_no2].linked_to = Location(s1,p_no1)
+            pt1 = self.next_topo.node[s1]["ports"][p_no1].port_type
+            pt2 = self.next_topo.node[s2]["ports"][p_no2].port_type
             if pt1 != pt2:
                 print "MISMATCH ",
                 print pt1
                 print pt2
             self.next_topo.add_edge(s1, s2, {s1: p_no1, s2: p_no2, 'type' : pt1})
-            
+
         # IF REACHED, WE'VE REMOVED AN EDGE, OR ADDED ONE, OR BOTH
         self.debug_log.debug(self.next_topo)
         self.queue_update(self.get_update_no())
